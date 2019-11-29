@@ -55,38 +55,13 @@ int main( int argc, char** argv )
  filter2D(gray_image, Gx, 5 , dxKernel, anchor, delta, BORDER_DEFAULT );
  filter2D(gray_image, Gy, 5 , dyKernel, anchor, delta, BORDER_DEFAULT );
 
- //outMag.create(gray_image.size(),CV_64F);
- //Mat outDir,outMag,magthresh;
- //outDir.create(image.size(), CV_32F);
- //outDir.create(gray_image.size(),CV_32F);
-
- //Mat outDir.create(gray_image.size(),CV_64F);
- //outMag.create(gray_image.size(),CV_32F);
- //magthresh.create(gray_image.size(),CV_32F);
- //getMag(Gx,Gy,outMag,gray_image);
- //getDirection(Gx,Gy,outDir);
- //imwrite( "outMag.jpg", outMag);
- //instilize  Matrices
  cv::Mat mag,theta,houghspaces;
- //mag.create(gray_image.size(),CV_64F);
- //theta.create(gray_image.size(),CV_64F);
- //rho.create(gray_image.size(),CV_32F);
- //MagThresh.create(gray_image.size(),CV_64F);
+
  int rho_width = gray_image.rows;
  int rho_height = gray_image.cols;
  houghspaces.create(2*(rho_width+rho_height),360,CV_32F);
  houghspaces = Scalar(0,0,0);
 
- //cv::Mat rho(Gx.size(), Gx.type());
- //calculating the Magnitude which is: mag=sqrt(Gx^2 + Gy^2)
- //cv::magnitude(Gx, Gy, mag);
-
-
-
- //cv::Mat diff = Angle != theta;
-// Equal if no elements disagree
-//bool eq = cv::countNonZero(diff) == 0;
-//cout<<"Eq: "<<eq<<endl;
 Mat Mag, Angle;
 //Mag.create(gray_image.size(),CV_64F);
 Angle.create(gray_image.size(),CV_32F);
@@ -121,7 +96,7 @@ getThresholdedMag(Mag,MagThresh);
  for ( int i = 0; i < Mag.rows; i++ ){
 		for( int j = 0; j < Mag.cols; j++ ){
       //angle=outDir.at<double>(i,j);
-      if (MagThresh.at<float>(i, j) > 250) {
+      if (MagThresh.at<float>(i, j) > 250) { //250 is threshhold
         angle = Angle.at<float>(i, j);
         if (angle > 0) radian = (angle * (180/pi));
         else radian = 360 + (angle * (180/pi));
@@ -143,6 +118,7 @@ normalize(houghspaces, houghspaces, 0, 255, NORM_MINMAX);
 imwrite( "5houghspaces.jpg", houghspaces );
 std::vector<float>  rhoValues;
 std::vector<float>  thetaValues;
+// 25 is manually number (I'll fix bt tommorw)
 rhoValues.resize(25);
 thetaValues.resize(25);
 int count=0;
@@ -150,12 +126,11 @@ for (int i = 0; i < houghspaces.rows; i++) {
   for (int j = 0; j < houghspaces.cols; j++) {
     float val = 0.0;
     val = houghspaces.at<float>(i, j);
-    if (val > 150){
+    if (val > 150){ //150 is threshhold
       rhoValues[count]=i;
       thetaValues[count]=j;
       houghspaces.at<float>(i, j) = 255;
       count++;
-      // std::cout<< rhoValues.size() << " + " << thetaValues.size() << "\n";
     }
 
     else houghspaces.at<float>(i, j) = 0.0;
@@ -166,7 +141,6 @@ for( int i = 0; i < count; i++ )
 {
     float rhos = rhoValues[i]-rho_width - rho_height, thetas = thetaValues[i];
     float radians = thetas *pi/ 180;
-    //cout<<"rhos: "<<rhos<<", thetas: "<<radians<<endl;
     Point pt1, pt2;
     double a = cos(radians), b = sin(radians);
     double x0 = a*rhos, y0 = b*rhos;
@@ -174,7 +148,6 @@ for( int i = 0; i < count; i++ )
     pt1.y = cvRound(y0 + 1000*(a));
     pt2.x = cvRound(x0 - 1000*(-b));
     pt2.y = cvRound(y0 - 1000*(a));
-    //cout<<"pt1.x: "<<pt1.x<<", pt1.y: "<<pt1.y<<", pt2.x: "<<pt2.x<<", pt2.y: "<<pt2.y<<endl;
     line( image2, pt1, pt2, Scalar(0,0,255), 3, CV_AA);
 }
 
