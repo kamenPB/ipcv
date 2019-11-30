@@ -29,11 +29,18 @@ int main( int argc, char** argv )
    printf( " No image data \n " );
    return -1;
  }
- GaussianBlur( image, image, Size(3,3), 0, 0, BORDER_DEFAULT );
+
+
+ //GaussianBlur( image, image, Size(3,3), 0, 0, BORDER_DEFAULT );
+
+
  // CONVERT COLOUR, BLUR AND SAVE
  Mat gray_image;
  gray_image.create(image.size(), CV_32F);
  cvtColor( image, gray_image, CV_BGR2GRAY );
+
+ GaussianBlur( gray_image, gray_image, Size(9, 9), 2, 2 );
+
 
  // instilize two filtires dx and dy
  Mat dx,dy,dxKernel,dyKernel;
@@ -51,17 +58,18 @@ int main( int argc, char** argv )
  Mat Gx,Gy;
  Gx.create(image.size(), CV_32F);
  Gy.create(image.size(), CV_32F);
- Point anchor=Point( -1, -1 );
- double delta=0;
+ Point anchor = Point( -1, -1 );
+ double delta = 0;
  filter2D(gray_image, Gx, 5 , dxKernel, anchor, delta, BORDER_DEFAULT );
  filter2D(gray_image, Gy, 5 , dyKernel, anchor, delta, BORDER_DEFAULT );
 
- cv::Mat mag,theta,houghspaces;
+ Mat mag,theta,houghspaces;
 
  int rho_width = gray_image.rows;
  int rho_height = gray_image.cols;
  houghspaces.create(2*(rho_width+rho_height),360,CV_32F);
  houghspaces = Scalar(0,0,0);
+
 
 Mat Mag, Angle;
 //Mag.create(gray_image.size(),CV_64F);
@@ -70,106 +78,149 @@ cartToPolar(Gx, Gy, Mag, Angle, 1);
 //imwrite( "Angle.jpg", Angle );
 // display images
 
-float angle =0.0;
-float radian =0.0;
-float radians =0.0;
-float rho_value=0.0;
-float theta_value=0.0;
+float angle = 0.0;
+float radian = 0.0;
+float radians = 0.0;
+float rho_value = 0.0;
+float theta_value= 0.0;
 Mat MagThresh;
 MagThresh.create(Mag.size(),CV_32F);
-//vector<Vec2f> lines;
 
-int no_of_cols = 180;
-int no_of_rows = 1650;
-int initial_value = 0;
 
-std::vector<std::vector<float> > lines;
-lines.resize(no_of_rows, std::vector<float>(no_of_cols, initial_value));
-
-// Read from matrix.
-float value = lines[1][2];
-
-// Save to matrix.
-int magThr = 150;
-int houghSpaceThr = 75;
+// threshholds
+int magThr = 120;
+int houghSpaceThr = 120;
 
 getThresholdedMag(Mag, MagThresh, magThr);
 
- for ( int i = 0; i < Mag.rows; i++ ){
-		for( int j = 0; j < Mag.cols; j++ ){
-      if (MagThresh.at<float>(i, j) > 0) { // value is either 0 or 255
-        angle = Angle.at<float>(i, j);
-        if (angle > 0) radian = (angle * (180/pi));
-        else radian = 360 + (angle * (180/pi));
 
-        radian = round(radian);
+int rMin = 150;
+int rMax = 200;
 
-        for (int theta_value = 0; theta_value <180; theta_value ++) {
-          radians = theta_value * (pi/ 180);
-          rho_value = (j * cos(radians)) + (i * sin(radians)) + rho_width + rho_height;
-          houghspaces.at<float>( rho_value , theta_value ) += 1;
-        }
+int sizes[] = {2*(rho_width+rho_height), 360, rMax}; // rho, theta, radius
+Mat houghspaceCircle(3, sizes, CV_32F, Scalar(0));
+
+
+// create houghspace for lines from threshholded magnitude image
+ for ( int i = 0; i < MagThresh.rows; i++ ){
+		for( int j = 0; j < MagThresh.cols; j++ ){
+        if (MagThresh.at<float>(i, j) > 0) { // value is either 0 or 255
+          for(int theta = 0; theta < 360; theta++){
+            for(int r = rMin; r < rMax; r++){
+              radians = theta * (pi / 180);
+              int x0 = round(i - r * cos(radians));
+              int y0 = round(j - r * sin(radians));
+              //cout<<"x0: "<<x0<<" y0: "<<y0<<endl;
+              if(x0 > 0 && x0 < MagThresh.cols && y0 > 0 && y0 << MagThresh.cols){
+                houghspaceCircle.at<float>(x0, y0, r) += 1;
+                //cout<<"i: "<<i<<"j: "<<j<<"id: "<<id<<endl;
+              }
+            }
+          }
+
 		 }
 	}
 }
 
 normalize(houghspaces, houghspaces, 0, 255, NORM_MINMAX);
+imwrite( "5houghspaceLines.jpg", houghspaces );
+
+int th = 300;
 
 int count=0;
-for (int i = 0; i < houghspaces.rows; i++) {
-  for (int j = 0; j < houghspaces.cols; j++) {
-    float val = 0.0;
-    val = houghspaces.at<float>(i, j);
-    if (val > houghSpaceThr){ //150 is threshhold
-      houghspaces.at<float>(i, j) = 255;
-      count++;
-    }
+for (int i = 0; i < houghspaceCircle.rows; i++) {
+  for (int j = 0; j < houghspaceCircle.cols; j++) {
+    for(int r = rMin; r < rMax; r++){
+      float val = 0.0;
+      val = houghspaces.at<float>(i, j, r);
+      if (val > th){
+        houghspaces.at<float>(i, j, r) = 255;
+        count++;
+      }
 
-    else houghspaces.at<float>(i, j) = 0.0;
+      else houghspaces.at<float>(i, j, r) = 0;
+    }
   }
  }
- std::vector<float>  rhoValues;
- std::vector<float>  thetaValues;
+
+ vector<float>  rhoValues;
+ vector<float>  thetaValues;
+ vector<float>  radiusValues;
  rhoValues.resize(count);
  thetaValues.resize(count);
+ radiusValues.resize(count);
 
  int index=0;
- for (int i = 0; i < houghspaces.rows; i++) {
-   for (int j = 0; j < houghspaces.cols; j++) {
-     float val = 0.0;
-     val = houghspaces.at<float>(i, j);
-     if (val == 255){
-       rhoValues[index]=i;
-       thetaValues[index]=j;
-       index++;
+ for (int i = 0; i < houghspaceCircle.rows; i++) {
+   for (int j = 0; j < houghspaceCircle.cols; j++) {
+     for(int r = rMin; r < rMax; r++){
+       float val = 0.0;
+       val = houghspaces.at<float>(i, j, r);
+       if (val == 255){
+         rhoValues[index]=i;
+         thetaValues[index]=j;
+         radiusValues[index]=r;
+         index++;
+       }
      }
    }
  }
-for( int i = 0; i < count; i++ )
-{
-    float rhos = rhoValues[i]-rho_width - rho_height, thetas = thetaValues[i];
-    float radians = thetas *pi/ 180;
-    //cout<<"rhos: "<<rhos<<", thetas: "<<radians<<endl;
-    Point pt1, pt2;
-    double a = cos(radians), b = sin(radians);
-    double x0 = a*rhos, y0 = b*rhos;
-    pt1.x = cvRound(x0 + 1000*(-b));
-    pt1.y = cvRound(y0 + 1000*(a));
-    pt2.x = cvRound(x0 - 1000*(-b));
-    pt2.y = cvRound(y0 - 1000*(a));
-    //cout<<"pt1.x: "<<pt1.x<<", pt1.y: "<<pt1.y<<", pt2.x: "<<pt2.x<<", pt2.y: "<<pt2.y<<endl;
-    line( image2, pt1, pt2, Scalar(0,0,255), 3, CV_AA);
-}
+
+// circle
+// for( int i = 0; i < count; i++ )
+// {
+//     float rhos = rhoValues[i]-rho_width - rho_height, thetas = thetaValues[i];
+//     float radians = thetas *pi/ 180;
+//     //cout<<"rhos: "<<rhos<<", thetas: "<<radians<<endl;
+//     Point pt1;
+//     double a = cos(radians), b = sin(radians);
+//     double x0 = a*rhos, y0 = b*rhos;
+//     pt1.x = cvRound(x0 + 1000*(-b));
+//     pt1.y = cvRound(y0 + 1000*(a));
+//     pt2.x = cvRound(x0 - 1000*(-b));
+//     pt2.y = cvRound(y0 - 1000*(a));
+//     //cout<<"pt1.x: "<<pt1.x<<", pt1.y: "<<pt1.y<<", pt2.x: "<<pt2.x<<", pt2.y: "<<pt2.y<<endl;
+//     line( image2, pt1, pt2, Scalar(0,0,255), 2, CV_AA);
+// }
+
+
+
+// storing images
  imwrite( "1edgeGx.jpg", Gx );
  imwrite( "2edgeGY.jpg", Gy );
  imwrite( "3lines.jpg", image2 );
  imwrite( "4image.jpg", image);
- imwrite( "5houghspaces.jpg", houghspaces );
  imwrite( "6Mag.jpg", Mag);
  imwrite( "7MagThresh.jpg", MagThresh);
  imwrite( "8Angle.jpg", Angle);
  return 0;
 }
+
+
+// apply threshhold to magnitude
+void getThresholdedMag(Mat &input, Mat &output, int magThr) {
+	Mat img;
+	img.create(input.size(), CV_32F);
+
+	normalize(input, img, 0, 255, NORM_MINMAX);
+
+	for (int y = 0; y < input.rows; y++) {
+    for (int x = 0; x < input.cols; x++) {
+
+      double val = 0;
+      val = img.at<float>(y, x);
+
+      if (val > magThr) output.at<float>(y, x) = 255.0;
+      else output.at<float>(y, x) = 0.0;
+    }
+  }
+}
+
+
+
+
+
+
 
 void getMag(Mat &Gx,Mat &Gy,Mat &dst,Mat &img){
   //Mat mm;
@@ -199,22 +250,4 @@ void getDirection(Mat &Gx,Mat &Gy,Mat &dst){
 
 
   normalize(dst, dst, 0, 255, NORM_MINMAX);
-}
-
-void getThresholdedMag(Mat &input, Mat &output, int magThr) {
-	Mat img;
-	img.create(input.size(), CV_32F);
-
-	normalize(input, img, 0, 255, NORM_MINMAX);
-
-	for (int y = 0; y < input.rows; y++) {
-    for (int x = 0; x < input.cols; x++) {
-
-      double val = 0;
-      val = img.at<float>(y, x);
-
-      if (val > magThr) output.at<float>(y, x) = 255.0;
-      else output.at<float>(y, x) = 0.0;
-    }
-  }
 }
